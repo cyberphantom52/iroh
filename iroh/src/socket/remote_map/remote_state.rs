@@ -726,6 +726,12 @@ impl RemoteStateActor {
             self.state
                 .open_path_on_conn(*conn_id, conn_state, &conn, &selected);
 
+            // The selected path may not be open on this connection, and may never open:
+            // after the remote restarts, a connection to its previous run can keep an
+            // address selected that the new run no longer listens on. Paths are only
+            // redundant once the selected one is open next to them.
+            let has_selected = conn_state.paths.values().any(|a| a == &selected);
+
             for (path_id, path_fourtuple) in conn_state.paths.iter() {
                 let Some(path) = conn.path(*path_id) else {
                     continue;
@@ -737,6 +743,7 @@ impl RemoteStateActor {
                 // to avoid the client and server independently closing different paths
                 // and racing to abandon the last one.
                 if conn.side().is_client()
+                    && has_selected
                     && path_fourtuple.is_ip()
                     && path_fourtuple != &selected
                     && conn_state.paths.values().filter(|a| a.is_ip()).count() > 1
